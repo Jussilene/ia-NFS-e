@@ -29,30 +29,9 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 // ---------------------------
 // "Banco" em memória de empresas (MVP)
 // ---------------------------
-// Agora já com loginPortal (padrão = CNPJ) e senhaPortal (null até cadastrar)
-let empresas = [
-  {
-    id: 1,
-    nome: "Time Saver",
-    cnpj: "52397721000180",
-    loginPortal: "52397721000180",
-    senhaPortal: null,
-  },
-  {
-    id: 3,
-    nome: "Ion Representações",
-    cnpj: "51337409000139",
-    loginPortal: "51337409000139",
-    senhaPortal: null,
-  },
-  {
-    id: 4,
-    nome: "cnpj da Barbhara",
-    cnpj: "63356089000143",
-    loginPortal: "63356089000143",
-    senhaPortal: null,
-  },
-];
+// Agora sem clientes fictícios: começa vazio.
+// O Ronaldo vai cadastrar tudo pela tela "Gerenciar empresas".
+let empresas = [];
 
 // listar empresas
 app.get("/api/empresas", (req, res) => {

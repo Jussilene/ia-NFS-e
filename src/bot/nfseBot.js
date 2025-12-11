@@ -16,6 +16,27 @@ const NFSE_PORTAL_URL =
   "https://www.nfse.gov.br/EmissorNacional/Login?ReturnUrl=%2fEmissorNacional";
 
 // ---------------------------------------------------------------------
+// Helper para lançar o navegador (ajustado para servidor Linux)
+// ---------------------------------------------------------------------
+const isLinux = process.platform === "linux";
+
+// Sempre lançar o navegador do robô com as opções certas
+async function launchNFSEBrowser() {
+  return await chromium.launch({
+    // no servidor (Linux) SEMPRE em headless
+    headless: isLinux ? true : false,
+    slowMo: 150,
+    args: isLinux
+      ? [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+        ]
+      : [],
+  });
+}
+
+// ---------------------------------------------------------------------
 // Helpers de datas (para filtro e logs)
 // ---------------------------------------------------------------------
 function formatDateBrFromISO(isoDate) {
@@ -284,10 +305,8 @@ async function runManualDownloadPortal(params = {}) {
     `[BOT] Pasta base de downloads: ${baseDir} | Subpasta: ${subDir} | Final: ${finalDir}`
   );
 
-  const browser = await chromium.launch({
-    headless: false,
-    slowMo: 150,
-  });
+  // *** AQUI usamos o helper para lançar o navegador ***
+  const browser = await launchNFSEBrowser();
 
   const context = await browser.newContext({
     acceptDownloads: true,
