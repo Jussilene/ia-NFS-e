@@ -68,15 +68,22 @@
       <!-- Barra superior com logo + tema -->
       <div class="w-full max-w-md flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
-          <div
-            class="h-9 w-9 rounded-lg border border-slate-300 flex items-center justify-center text-[11px] font-semibold tracking-[0.18em]"
-          >
-            IA
-          </div>
+          <!-- ❌ removido o quadrado "IA" -->
+
           <div class="leading-tight">
-            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">
-              NFSe Emissor Nacional
-            </p>
+            <div class="flex items-center gap-2">
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">
+                NFSe Emissor Nacional
+              </p>
+
+              <!-- ✅ versão -->
+              <span
+                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-slate-600"
+              >
+                v0.1.0
+              </span>
+            </div>
+
             <p class="text-sm text-slate-400">
               Console inteligente de notas fiscais eletrônicas
             </p>
