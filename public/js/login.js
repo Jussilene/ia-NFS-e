@@ -1,32 +1,4 @@
 // public/js/login.js
-
-const users = [
-  {
-    email: "admju@empresa.com",
-    password: "123456",
-    displayName: "admju",
-    role: "admin",
-  },
-  {
-    email: "admb@empresa.com",
-    password: "123456",
-    displayName: "admB",
-    role: "admin",
-  },
-  {
-    email: "teste@empresa.com",
-    password: "123456",
-    displayName: "teste",
-    role: "user",
-  },
-  {
-    email: "ronaldo.teste@empresa.com",
-    password: "123456",
-    displayName: "Ronaldo",
-    role: "admin",
-  },
-];
-
 const form = document.getElementById("loginForm");
 const errorBox = document.getElementById("loginError");
 
@@ -57,13 +29,42 @@ function safeTrim(v) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+function showLoginError(msg) {
+  if (!errorBox) return;
+  errorBox.textContent = msg || "E-mail ou senha inválidos. Tente novamente.";
+  errorBox.classList.remove("hidden");
+}
+
+function hideLoginError() {
+  if (!errorBox) return;
+  errorBox.classList.add("hidden");
+}
+
+function setForgotFeedback(msg, type = "info") {
+  if (!forgotFeedback) return;
+  forgotFeedback.textContent = msg || "";
+
+  // reset classes
+  forgotFeedback.classList.remove("text-green-600", "text-red-500", "text-slate-500");
+
+  if (!msg) {
+    forgotFeedback.classList.add("text-slate-500");
+    return;
+  }
+
+  if (type === "success") forgotFeedback.classList.add("text-green-600");
+  else if (type === "error") forgotFeedback.classList.add("text-red-500");
+  else forgotFeedback.classList.add("text-slate-500");
+}
+
 function openForgotModal() {
   if (!forgotModal) return;
   forgotModal.classList.remove("hidden");
   forgotModal.classList.add("flex");
   forgotModal.setAttribute("aria-hidden", "false");
 
-  // preenche com e-mail atual, se tiver
+  setForgotFeedback("");
+
   if (forgotEmailEl && emailEl) {
     const currentEmail = safeTrim(emailEl.value);
     if (currentEmail) forgotEmailEl.value = currentEmail;
@@ -76,7 +77,7 @@ function closeForgot() {
   forgotModal.classList.add("hidden");
   forgotModal.classList.remove("flex");
   forgotModal.setAttribute("aria-hidden", "true");
-  if (forgotFeedback) forgotFeedback.textContent = "";
+  setForgotFeedback("");
 }
 
 async function copyToClipboard(text) {
@@ -136,14 +137,8 @@ async function copyToClipboard(text) {
     if (eyeClosedIcon) eyeClosedIcon.classList.toggle("hidden", showing);
     if (eyeOpenIcon) eyeOpenIcon.classList.toggle("hidden", !showing);
 
-    togglePasswordBtn.setAttribute(
-      "aria-label",
-      showing ? "Ocultar senha" : "Mostrar senha"
-    );
-    togglePasswordBtn.setAttribute(
-      "title",
-      showing ? "Ocultar senha" : "Mostrar senha"
-    );
+    togglePasswordBtn.setAttribute("aria-label", showing ? "Ocultar senha" : "Mostrar senha");
+    togglePasswordBtn.setAttribute("title", showing ? "Ocultar senha" : "Mostrar senha");
   }
 
   setUI();
@@ -156,19 +151,16 @@ async function copyToClipboard(text) {
 })();
 
 // --------------------
-// Esqueci a senha (MVP)
+// Esqueci a senha (AGORA: backend /auth/forgot-password)
 // --------------------
 (function initForgotPassword() {
   if (forgotPasswordBtn) {
-    forgotPasswordBtn.addEventListener("click", () => {
-      openForgotModal();
-    });
+    forgotPasswordBtn.addEventListener("click", () => openForgotModal());
   }
 
   if (closeForgotModal) closeForgotModal.addEventListener("click", closeForgot);
   if (forgotBackdrop) forgotBackdrop.addEventListener("click", closeForgot);
 
-  // ESC fecha
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeForgot();
   });
@@ -177,86 +169,109 @@ async function copyToClipboard(text) {
     copyForgotEmailBtn.addEventListener("click", async () => {
       const email = safeTrim(forgotEmailEl ? forgotEmailEl.value : "");
       if (!email) {
-        if (forgotFeedback) forgotFeedback.textContent = "Informe seu e-mail para copiar.";
+        setForgotFeedback("Informe seu e-mail para copiar.", "error");
         return;
       }
       const ok = await copyToClipboard(email);
-      if (forgotFeedback) {
-        forgotFeedback.textContent = ok
-          ? "E-mail copiado. Agora envie para o admin/suporte."
-          : "Não consegui copiar automaticamente. Copie manualmente.";
-      }
+      setForgotFeedback(
+        ok ? "E-mail copiado." : "Não consegui copiar automaticamente. Copie manualmente.",
+        ok ? "success" : "error"
+      );
     });
   }
 
   if (sendForgotEmailBtn) {
-    sendForgotEmailBtn.addEventListener("click", () => {
-      const email = safeTrim(forgotEmailEl ? forgotEmailEl.value : "");
+    sendForgotEmailBtn.addEventListener("click", async () => {
+      const email = safeTrim(forgotEmailEl ? forgotEmailEl.value : "").toLowerCase();
       if (!email) {
-        if (forgotFeedback) forgotFeedback.textContent = "Informe seu e-mail antes de enviar.";
+        setForgotFeedback("Informe seu e-mail antes de enviar.", "error");
         return;
       }
 
-      // Ajuste aqui o e-mail do suporte/admin se quiser
-      const suporteEmail = "suporte@empresa.com";
+      const prevText = sendForgotEmailBtn.textContent;
+      sendForgotEmailBtn.disabled = true;
+      sendForgotEmailBtn.textContent = "Enviando...";
 
-      const subject = encodeURIComponent("[NFSe] Recuperação de acesso");
-      const body = encodeURIComponent(
-        `Olá,\n\nEsqueci minha senha de acesso ao painel NFSe.\n\nMeu e-mail: ${email}\n\nPor favor, me ajude a recuperar/atualizar minha senha.\n\nObrigado(a).`
-      );
+      try {
+        const res = await fetch("/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email }),
+        });
 
-      window.location.href = `mailto:${suporteEmail}?subject=${subject}&body=${body}`;
+        const data = await res.json().catch(() => ({}));
 
-      if (forgotFeedback) {
-        forgotFeedback.textContent =
-          "Abrimos seu aplicativo de e-mail com a mensagem pronta.";
+        // resposta neutra: mesmo se email não existir, mostra sucesso
+        const msg =
+          data?.message ||
+          "Se o e-mail existir, enviaremos um link de recuperação. Verifique sua caixa de entrada e spam.";
+
+        setForgotFeedback(msg, "success");
+      } catch (err) {
+        console.error(err);
+        setForgotFeedback("Falha ao enviar. Tente novamente em instantes.", "error");
+      } finally {
+        sendForgotEmailBtn.disabled = false;
+        sendForgotEmailBtn.textContent = prevText || "Enviar e-mail";
       }
     });
   }
 })();
 
 // --------------------
-// Submit login
+// Submit login (backend /auth/login)
 // --------------------
 if (form) {
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-
-    if (errorBox) errorBox.classList.add("hidden");
+    hideLoginError();
 
     const email = safeTrim(emailEl ? emailEl.value : "").toLowerCase();
     const password = safeTrim(passwordEl ? passwordEl.value : "");
 
-    const user = users.find(
-      (u) => u.email.toLowerCase() === email && u.password === password
-    );
-
-    if (!user) {
-      if (errorBox) errorBox.classList.remove("hidden");
+    if (!email || !password) {
+      showLoginError("Informe e-mail e senha.");
       return;
     }
 
-    // lembrar acesso: salva e-mail ou limpa
     try {
-      const remember = !!(rememberEl && rememberEl.checked);
-      localStorage.setItem(REMEMBER_KEY, remember ? "true" : "false");
-      if (remember) {
-        localStorage.setItem(REMEMBER_EMAIL_KEY, user.email);
-      } else {
-        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      const res = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.ok) {
+        showLoginError(data?.error || "E-mail ou senha inválidos. Tente novamente.");
+        return;
       }
-    } catch (_) {}
 
-    // Salva usuário no localStorage
-    localStorage.setItem(
-      "nfseUser",
-      JSON.stringify({
-        email: user.email,
-        displayName: user.displayName,
-        role: user.role,
-      })
-    );
+      // lembrar acesso
+      try {
+        const remember = !!(rememberEl && rememberEl.checked);
+        localStorage.setItem(REMEMBER_KEY, remember ? "true" : "false");
+        if (remember) localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+        else localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      } catch (_) {}
 
-    window.location.href = "/dashboard.html";
+      const u = data.user || {};
+      localStorage.setItem(
+        "nfseUser",
+        JSON.stringify({
+          email: u.email || email,
+          displayName: u.name || (email.includes("@") ? email.split("@")[0] : email),
+          role: (u.role || "USER").toLowerCase(),
+        })
+      );
+
+      window.location.href = "/dashboard.html";
+    } catch (err) {
+      console.error(err);
+      showLoginError("Erro ao conectar no servidor. Tente novamente.");
+    }
   });
 }

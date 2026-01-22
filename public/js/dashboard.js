@@ -30,31 +30,622 @@ function apiHeaders(extra = {}) {
   return h;
 }
 
+// ---------------------------
+// ✅ Logout (usado só pelo menu)
+// ---------------------------
+async function doLogout() {
+  try {
+    await fetch("/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (err) {
+    // silencioso: mesmo que falhe, limpa local e redireciona
+  }
+
+  try {
+    localStorage.removeItem("nfseUser");
+  } catch {}
+
+  window.location.href = "/index.html";
+}
+
+// ---------------------------
+// ✅ NOVO: menu do usuário (clicável) + modal Configurações
+// ✅ AJUSTES PEDIDOS:
+//    1) Mantém tema do modal sempre claro (sem dark:*)
+//    2) Remove duplicidade de "Sair" do topo (esconde botão do topo)
+//    3) No topo fica apenas NOME + 3 tracinhos (esconde avatar)
+//    4) Modal de Configurações em TELA CHEIA
+// ---------------------------
 const userNameDisplay = document.getElementById("userNameDisplay");
 const userAvatar = document.getElementById("userAvatar");
 
 let nameToShow =
   currentUser.displayName ||
+  currentUser.name ||
   (currentUser.email ? currentUser.email.split("@")[0] : "Usuário");
 
-if (userNameDisplay) {
-  userNameDisplay.textContent = nameToShow;
-}
-
+// ✅ pedido: topo apenas nome + 3 tracinhos (sem avatar bolinha)
 if (userAvatar) {
-  userAvatar.textContent = nameToShow.charAt(0).toUpperCase();
+  userAvatar.style.display = "none";
 }
 
-const logoutBtn = document.getElementById("logoutBtn");
-if (logoutBtn) {
-  logoutBtn.addEventListener("click", () => {
-    localStorage.removeItem("nfseUser");
-    window.location.href = "/index.html";
-  });
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
+
+// ✅ pedido: tirar "Sair" duplicado do topo
+(function hideTopLogoutIfAny() {
+  const logoutBtnTop = document.getElementById("logoutBtn");
+  if (logoutBtnTop) {
+    logoutBtnTop.style.display = "none";
+  }
+})();
+
+function ensureUserMenuUI() {
+  if (!userNameDisplay) return;
+
+  // ✅ guarda: evita recriar menu e re-binds
+  if (document.getElementById("userMenuBtn")) return;
+
+  // container
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "relative";
+  wrapper.style.display = "inline-flex";
+  wrapper.style.alignItems = "center";
+  wrapper.style.gap = "8px";
+
+  // botão
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.id = "userMenuBtn";
+  btn.className =
+    "inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 transition";
+  btn.setAttribute("aria-haspopup", "true");
+  btn.setAttribute("aria-expanded", "false");
+  btn.title = "Menu do usuário";
+
+  // label
+  const label = document.createElement("span");
+  label.id = "userMenuLabel";
+  label.className = "text-sm font-medium";
+  label.textContent = nameToShow;
+
+  // ícone
+  const burger = document.createElement("span");
+  burger.className = "text-lg leading-none opacity-80";
+  burger.textContent = "≡";
+
+  btn.appendChild(label);
+  btn.appendChild(burger);
+
+  // dropdown
+  const menu = document.createElement("div");
+  menu.id = "userMenuDropdown";
+  menu.className =
+    "hidden absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden z-50";
+  menu.style.top = "100%";
+
+  menu.innerHTML = `
+    <div class="px-4 py-3 border-b border-slate-100">
+      <div class="text-sm font-semibold text-slate-900">${escapeHtml(nameToShow)}</div>
+      <div class="text-xs text-slate-500">${escapeHtml(currentUser.email || "")}</div>
+    </div>
+
+    <button id="userMenuConfigBtn"
+      class="w-full text-left px-4 py-3 text-sm hover:bg-slate-50">
+      ⚙️ Configurações
+    </button>
+
+    <button id="userMenuLogoutBtn"
+      class="w-full text-left px-4 py-3 text-sm hover:bg-slate-50">
+      ↩️ Sair
+    </button>
+  `;
+
+  // coloca no lugar do texto antigo
+  const parent = userNameDisplay.parentElement || userNameDisplay;
+  parent.insertBefore(wrapper, userNameDisplay);
+  wrapper.appendChild(btn);
+
+  // some com o antigo
+  userNameDisplay.style.display = "none";
+
+  wrapper.appendChild(menu);
+
+  function closeMenu() {
+    menu.classList.add("hidden");
+    btn.setAttribute("aria-expanded", "false");
+  }
+  function toggleMenu() {
+    const willOpen = menu.classList.contains("hidden");
+    if (willOpen) {
+      menu.classList.remove("hidden");
+      btn.setAttribute("aria-expanded", "true");
+    } else {
+      closeMenu();
+    }
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMenu();
+  });
+
+  // ✅ fecha ao clicar fora (bind único)
+  if (!document.documentElement.dataset._userMenuDocClickBound) {
+    document.documentElement.dataset._userMenuDocClickBound = "1";
+    document.addEventListener("click", () => {
+      const dropdown = document.getElementById("userMenuDropdown");
+      const btnNow = document.getElementById("userMenuBtn");
+      if (dropdown && btnNow) {
+        dropdown.classList.add("hidden");
+        btnNow.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // ações
+  const logoutBtn = menu.querySelector("#userMenuLogoutBtn");
+  const configBtn = menu.querySelector("#userMenuConfigBtn");
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+      doLogout();
+    });
+  }
+
+  if (configBtn) {
+    configBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+      openSettingsModal();
+    });
+  }
+}
+
+let settingsModalEl = null;
+
+async function fetchMeRole() {
+  try {
+    const res = await fetch("/auth/me", { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+async function openSettingsModal() {
+  if (settingsModalEl) {
+    settingsModalEl.classList.remove("hidden");
+    return;
+  }
+
+  const me = (await fetchMeRole()) || {
+    name: currentUser.name || currentUser.displayName || nameToShow,
+    email: currentUser.email || "",
+    role: currentUser.role || "USER",
+  };
+
+  settingsModalEl = document.createElement("div");
+  settingsModalEl.id = "settingsModal";
+  settingsModalEl.className =
+    "fixed inset-0 z-[9999] flex items-stretch justify-stretch bg-black/50";
+
+  const isAdmin = String(me.role || "").toUpperCase() === "ADMIN";
+
+  // ✅ pedido: modal em TELA CHEIA
+  settingsModalEl.innerHTML = `
+    <div class="w-screen h-screen max-w-none max-h-none rounded-none bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div>
+          <div class="text-base font-semibold text-slate-900">Configurações</div>
+          <div class="text-xs text-slate-500">Gerencie seus dados e acessos</div>
+        </div>
+        <button id="settingsCloseBtn" class="px-3 py-1 rounded-lg hover:bg-slate-100">✕</button>
+      </div>
+
+      <div class="flex flex-1 min-h-0 overflow-hidden">
+        <div class="w-72 border-r border-slate-100 p-3 space-y-2">
+          <button data-tab="account" class="settings-tab w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-medium">
+            👤 Minha conta
+          </button>
+          ${
+            isAdmin
+              ? `<button data-tab="users" class="settings-tab w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 font-medium">
+                  🧩 Usuários
+                </button>`
+              : ""
+          }
+        </div>
+
+        <div class="flex-1 p-5 overflow-y-auto">
+          <div id="settingsTab-account" class="settings-panel">
+            <div class="text-sm font-semibold mb-3 text-slate-900">Minha conta</div>
+
+            <div class="grid gap-3 max-w-2xl">
+              <label class="text-sm text-slate-700">
+                Nome
+                <input id="meName" class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                  value="${escapeHtml(me.name || "")}">
+              </label>
+
+              <label class="text-sm text-slate-700">
+                Email
+                <input id="meEmail" class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                  value="${escapeHtml(me.email || "")}">
+              </label>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label class="text-sm text-slate-700">
+                  Nova senha
+                  <input id="mePass" type="password" class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                    placeholder="Digite a nova senha">
+                </label>
+
+                <label class="text-sm text-slate-700">
+                  Confirmar senha
+                  <input id="mePass2" type="password" class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                    placeholder="Confirme a nova senha">
+                </label>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button id="saveMeBtn" class="px-4 py-2 rounded-lg bg-slate-900 text-white hover:opacity-90">
+                  Salvar
+                </button>
+                <span id="saveMeMsg" class="text-sm text-slate-600"></span>
+              </div>
+            </div>
+          </div>
+
+          ${
+            isAdmin
+              ? `
+          <div id="settingsTab-users" class="settings-panel hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold text-slate-900">Usuários</div>
+                <div class="text-xs text-slate-500">Criar, desativar e resetar senha</div>
+              </div>
+
+              <div class="text-xs text-slate-500">
+                <span id="usersCount">—</span>
+              </div>
+            </div>
+
+            <div class="mt-4 grid md:grid-cols-2 gap-4">
+              <div class="rounded-xl border border-slate-200 p-4">
+                <div class="text-sm font-semibold mb-2">Criar usuário</div>
+
+                <div class="grid gap-2">
+                  <input id="newUserName" class="px-3 py-2 rounded-lg border border-slate-200 bg-white" placeholder="Nome">
+                  <input id="newUserEmail" class="px-3 py-2 rounded-lg border border-slate-200 bg-white" placeholder="Email">
+                  <input id="newUserPass" type="password" class="px-3 py-2 rounded-lg border border-slate-200 bg-white" placeholder="Senha temporária">
+                  <select id="newUserRole" class="px-3 py-2 rounded-lg border border-slate-200 bg-white">
+                    <option value="USER">USER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+
+                  <button id="createUserBtn" class="mt-2 px-4 py-2 rounded-lg bg-slate-900 text-white hover:opacity-90">
+                    Criar
+                  </button>
+                  <div id="createUserMsg" class="text-sm text-slate-600"></div>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-slate-200 p-4">
+                <div class="text-sm font-semibold mb-2">Lista</div>
+
+                <div class="max-h-[70vh] overflow-auto border border-slate-100 rounded-lg">
+                  <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th class="text-left px-3 py-2">Nome</th>
+                        <th class="text-left px-3 py-2">Email</th>
+                        <th class="text-left px-3 py-2">Role</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="usersTbody"></tbody>
+                  </table>
+                </div>
+
+                <div id="usersMsg" class="text-sm text-slate-600 mt-2"></div>
+              </div>
+            </div>
+          </div>
+          `
+              : ""
+          }
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(settingsModalEl);
+
+  // close
+  const closeBtn = settingsModalEl.querySelector("#settingsCloseBtn");
+  if (closeBtn)
+    closeBtn.addEventListener("click", () =>
+      settingsModalEl.classList.add("hidden")
+    );
+
+  // (mantém clique fora para fechar)
+  settingsModalEl.addEventListener("click", (e) => {
+    if (e.target === settingsModalEl) settingsModalEl.classList.add("hidden");
+  });
+
+  // tabs
+  const tabBtns = settingsModalEl.querySelectorAll(".settings-tab");
+  tabBtns.forEach((b) => {
+    b.addEventListener("click", () => {
+      const tab = b.getAttribute("data-tab");
+      settingsModalEl
+        .querySelectorAll(".settings-panel")
+        .forEach((p) => p.classList.add("hidden"));
+      const panel = settingsModalEl.querySelector(`#settingsTab-${tab}`);
+      if (panel) panel.classList.remove("hidden");
+    });
+  });
+
+  // save me
+  const saveMeBtn = settingsModalEl.querySelector("#saveMeBtn");
+  if (saveMeBtn) {
+    saveMeBtn.addEventListener("click", async () => {
+      const msg = settingsModalEl.querySelector("#saveMeMsg");
+      if (msg) msg.textContent = "Salvando...";
+
+      const name =
+        settingsModalEl.querySelector("#meName")?.value?.trim() || "";
+      const email =
+        settingsModalEl.querySelector("#meEmail")?.value?.trim() || "";
+      const pass = settingsModalEl.querySelector("#mePass")?.value || "";
+      const pass2 = settingsModalEl.querySelector("#mePass2")?.value || "";
+
+      if (!name || !email) {
+        if (msg) msg.textContent = "Preencha nome e email.";
+        return;
+      }
+
+      if ((pass || pass2) && pass !== pass2) {
+        if (msg) msg.textContent = "As senhas não conferem.";
+        return;
+      }
+
+      // tenta backend (auth real). Se não estiver usando, só atualiza localStorage.
+      try {
+        const res = await fetch("/auth/me", { credentials: "include" });
+        if (res.ok) {
+          const up = await fetch("/auth/update-profile", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email }),
+          });
+
+          if (!up.ok) {
+            const t = await up.text().catch(() => "");
+            if (msg) msg.textContent = t || "Erro ao salvar perfil.";
+            return;
+          }
+
+          if (pass) {
+            const pw = await fetch("/auth/change-password", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ newPassword: pass }),
+            });
+            if (!pw.ok) {
+              const t = await pw.text().catch(() => "");
+              if (msg) msg.textContent = t || "Erro ao alterar senha.";
+              return;
+            }
+          }
+
+          currentUser.name = name;
+          currentUser.displayName = name;
+          currentUser.email = email;
+          localStorage.setItem("nfseUser", JSON.stringify(currentUser));
+
+          const label = document.getElementById("userMenuLabel");
+          if (label) label.textContent = name;
+
+          if (msg) msg.textContent = "Salvo com sucesso.";
+          return;
+        }
+      } catch {}
+
+      // fallback local
+      currentUser.name = name;
+      currentUser.displayName = name;
+      currentUser.email = email;
+      localStorage.setItem("nfseUser", JSON.stringify(currentUser));
+
+      const label = document.getElementById("userMenuLabel");
+      if (label) label.textContent = name;
+
+      if (msg) msg.textContent = "Salvo (local).";
+    });
+  }
+
+  // admin load users
+  if (isAdmin) {
+    await adminLoadUsersIntoModal();
+    wireAdminActions();
+  }
+}
+
+async function adminLoadUsersIntoModal() {
+  const tbody = settingsModalEl?.querySelector("#usersTbody");
+  const countEl = settingsModalEl?.querySelector("#usersCount");
+  const msgEl = settingsModalEl?.querySelector("#usersMsg");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+  if (msgEl) msgEl.textContent = "Carregando...";
+
+  try {
+    const res = await fetch("/admin/users", { credentials: "include" });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      if (msgEl) msgEl.textContent = t || "Erro ao listar usuários.";
+      return;
+    }
+
+    const data = await res.json();
+    const list = Array.isArray(data?.users) ? data.users : [];
+    const totals = data?.totals || null;
+
+    if (countEl && totals) {
+      countEl.textContent = `Ativos: ${totals.active} | Inativos: ${totals.inactive} | Total: ${totals.total}`;
+    }
+
+    list.forEach((u) => {
+      const tr = document.createElement("tr");
+      tr.className = "border-t border-slate-100";
+      tr.innerHTML = `
+        <td class="px-3 py-2">${escapeHtml(u.name || "—")}</td>
+        <td class="px-3 py-2">${escapeHtml(u.email || "—")}</td>
+        <td class="px-3 py-2">${escapeHtml(u.role || "USER")}</td>
+        <td class="px-3 py-2">${u.is_active ? "Ativo" : "Inativo"}</td>
+        <td class="px-3 py-2">
+          <button data-action="toggle" data-id="${u.id}" class="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50">
+            ${u.is_active ? "Desativar" : "Ativar"}
+          </button>
+          <button data-action="reset" data-id="${u.id}" class="ml-1 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50">
+            Reset senha
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (msgEl) msgEl.textContent = "";
+  } catch (err) {
+    console.error(err);
+    if (msgEl) msgEl.textContent = "Erro inesperado ao listar usuários.";
+  }
+}
+
+function wireAdminActions() {
+  const createBtn = settingsModalEl?.querySelector("#createUserBtn");
+  const createMsg = settingsModalEl?.querySelector("#createUserMsg");
+
+  if (createBtn) {
+    createBtn.addEventListener("click", async () => {
+      const name =
+        settingsModalEl.querySelector("#newUserName")?.value?.trim() || "";
+      const email =
+        settingsModalEl.querySelector("#newUserEmail")?.value?.trim() || "";
+      const pass = settingsModalEl.querySelector("#newUserPass")?.value || "";
+      const role = settingsModalEl.querySelector("#newUserRole")?.value || "USER";
+
+      if (!name || !email || !pass) {
+        if (createMsg) createMsg.textContent = "Preencha nome, email e senha.";
+        return;
+      }
+
+      if (createMsg) createMsg.textContent = "Criando...";
+
+      try {
+        const res = await fetch("/admin/users", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, password: pass, role }),
+        });
+
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          if (createMsg) createMsg.textContent = t || "Erro ao criar usuário.";
+          return;
+        }
+
+        if (createMsg) createMsg.textContent = "Usuário criado.";
+        settingsModalEl.querySelector("#newUserName").value = "";
+        settingsModalEl.querySelector("#newUserEmail").value = "";
+        settingsModalEl.querySelector("#newUserPass").value = "";
+        settingsModalEl.querySelector("#newUserRole").value = "USER";
+
+        await adminLoadUsersIntoModal();
+      } catch (err) {
+        console.error(err);
+        if (createMsg) createMsg.textContent = "Erro inesperado ao criar usuário.";
+      }
+    });
+  }
+
+  const tbody = settingsModalEl?.querySelector("#usersTbody");
+  if (tbody && tbody.dataset.bound !== "1") {
+    tbody.dataset.bound = "1";
+    tbody.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button");
+      if (!btn) return;
+
+      const action = btn.getAttribute("data-action");
+      const id = btn.getAttribute("data-id");
+      if (!action || !id) return;
+
+      if (action === "toggle") {
+        try {
+          const res = await fetch(
+            `/admin/users/${encodeURIComponent(id)}/toggle`,
+            {
+              method: "POST",
+              credentials: "include",
+            }
+          );
+          if (!res.ok) return;
+          await adminLoadUsersIntoModal();
+        } catch {}
+      }
+
+      if (action === "reset") {
+        const newPass = prompt("Digite a nova senha temporária para esse usuário:");
+        if (!newPass) return;
+
+        try {
+          const res = await fetch(
+            `/admin/users/${encodeURIComponent(id)}/reset-password`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ newPassword: newPass }),
+            }
+          );
+          if (!res.ok) return;
+          alert("Senha resetada com sucesso.");
+        } catch {}
+      }
+    });
+  }
+}
+
+// init menu
+ensureUserMenuUI();
 
 // ---------------------------
 // Tema claro/escuro (switch)
+// ✅ AJUSTE: agora alterna TAMBÉM a classe "dark" no <html>
+//            (pra funcionar com Tailwind dark:...)
 // ---------------------------
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const themeToggleKnob = document.getElementById("themeToggleKnob");
@@ -62,7 +653,10 @@ const themeSunIcon = document.getElementById("themeSunIcon");
 const themeMoonIcon = document.getElementById("themeMoonIcon");
 
 function applyThemeUI(isDark) {
+  // ✅ suporta os 2 estilos de CSS (dark-mode no body e dark no html)
   document.body.classList.toggle("dark-mode", isDark);
+  document.documentElement.classList.toggle("dark", isDark);
+
   localStorage.setItem("nfseTheme", isDark ? "dark" : "light");
   if (themeToggleBtn) themeToggleBtn.setAttribute("aria-checked", String(isDark));
 
@@ -95,7 +689,9 @@ function applyThemeUI(isDark) {
 
 if (themeToggleBtn) {
   themeToggleBtn.addEventListener("click", () => {
-    const willBeDark = !document.body.classList.contains("dark-mode");
+    const willBeDark =
+      !document.documentElement.classList.contains("dark") &&
+      !document.body.classList.contains("dark-mode");
     applyThemeUI(willBeDark);
   });
 }
@@ -699,7 +1295,6 @@ function renderEmpresas() {
 }
 
 // ✅ Delegação de evento: seleção sempre funciona (mesmo após re-render)
-// ✅ Patch: ignora clique em linha sem dataset.id
 if (empresasTableBody && empresasTableBody.dataset._bound !== "1") {
   empresasTableBody.dataset._bound = "1";
   empresasTableBody.addEventListener("click", (ev) => {
@@ -788,7 +1383,6 @@ if (salvarEmpresaBtn) {
       const json = await res.json().catch(() => ({}));
       const empresaCriada = (json && json.empresa) ? json.empresa : json;
 
-      // ✅ Patch: se não vier id, recarrega do backend (evita UI quebrar)
       if (!empresaCriada || empresaCriada.id == null) {
         await loadEmpresasFromAPI();
       } else {
@@ -821,19 +1415,20 @@ if (salvarEmpresaBtn) {
 if (removerEmpresaBtn) {
   removerEmpresaBtn.addEventListener("click", async () => {
     if (!empresaSelecionadaId) {
-      // ✅ Patch: feedback claro
       addLog(logsLote, "[AVISO] Selecione uma empresa na tabela antes de remover.");
       return;
     }
 
-    // opcional: confirmação (se você não quiser, pode remover esse bloco)
     if (!confirm("Deseja remover a empresa selecionada?")) return;
 
     try {
-      const res = await fetch(`/api/empresas/${encodeURIComponent(empresaSelecionadaId)}`, {
-        method: "DELETE",
-        headers: apiHeaders(),
-      });
+      const res = await fetch(
+        `/api/empresas/${encodeURIComponent(empresaSelecionadaId)}`,
+        {
+          method: "DELETE",
+          headers: apiHeaders(),
+        }
+      );
 
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -846,7 +1441,6 @@ if (removerEmpresaBtn) {
         return;
       }
 
-      // ✅ Patch: sempre recarrega do backend (garante sincronismo real)
       empresaSelecionadaId = null;
       removerEmpresaBtn.disabled = true;
 

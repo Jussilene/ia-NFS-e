@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import archiver from "archiver";
 import { fileURLToPath } from "url";
+import cookieParser from "cookie-parser";
 
 import { runManualDownload, runLoteDownload } from "./bot/nfseBot.js";
 
@@ -21,6 +22,16 @@ import emissaoRoutes from "./emissao/routes/emissao.routes.js";
 
 // ✅ garante tabela de emissão no SQLite
 import { ensureNfseEmissaoTables } from "./emissao/nfseEmissao.model.js";
+
+// ✅ Auth/Admin (NOVO) — rotas
+import authRoutes from "./auth/auth.routes.js";
+import adminRoutes from "./admin/admin.routes.js";
+
+// ✅ Auth/Admin (NOVO) — ler usuário do cookie (sessão)
+import { getSessionUser } from "./auth/session.store.js";
+
+// ✅ NOVO (ESQUECI SENHA) — rotas
+import passwordResetRoutes from "./routes/passwordReset.routes.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,25 +48,46 @@ ensureNfseEmissaoTables();
 // Middlewares
 // ---------------------------
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// ✅ Middleware multi-tenant (pega usuário do header)
-// - Front envia: x-user-email: currentUser.email
-// - Mantém compatibilidade com body/query (se vier)
+// ✅ Lê usuário logado pela sessão (cookie)
+// - NÃO muda a lógica do sistema, só define req.user (se logado)
 app.use((req, _res, next) => {
+  try {
+    const user = getSessionUser(req); // lê cookie nfse_session
+    if (user) req.user = user;
+  } catch {}
+  next();
+});
+
+// ✅ Middleware multi-tenant (compat + prioridade sessão)
+// - prioridade: sessão > header > body > query
+app.use((req, _res, next) => {
+  const sessionEmail = req.user?.email || "";
+
   const h = req.headers["x-user-email"];
   const headerEmail = (Array.isArray(h) ? h[0] : h) || "";
 
   const bodyEmail = req.body?.usuarioEmail || req.body?.userEmail || "";
   const queryEmail = req.query?.usuarioEmail || req.query?.userEmail || "";
 
-  // prioridade: header > body > query
-  req.userEmail = String(headerEmail || bodyEmail || queryEmail || "").trim();
+  req.userEmail = String(sessionEmail || headerEmail || bodyEmail || queryEmail || "").trim();
 
   next();
 });
+
+// ---------------------------
+// ✅ Rotas Auth/Admin (NOVO)
+// ---------------------------
+app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
+
+// ✅ NOVO (ESQUECI SENHA)
+// - registra /auth/forgot-password e /auth/reset-password
+app.use("/auth", passwordResetRoutes);
 
 // ---------------------------
 // Pasta pública de ZIPs
@@ -181,7 +213,7 @@ app.post("/api/nf/manual", async (req, res) => {
       ...req.body,
       baixarXml,
       baixarPdf,
-      // ✅ garante que histórico/execuções usem o usuário do header se o front não enviar
+      // ✅ garante que histórico/execuções usem o usuário do header ou sessão
       usuarioEmail: req.body?.usuarioEmail || req.userEmail || "",
       onLog: (msg) => console.log(msg),
     };
@@ -261,7 +293,6 @@ app.post("/api/nf/lote", async (req, res) => {
     });
 
     const logs = result?.logs || [];
-
     const finalDir = result?.paths?.jobDir || result?.jobDir || null;
 
     let downloadZipUrl = null;

@@ -5,6 +5,24 @@
     <title>IA NFS-e - Painel</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- ✅ AJUSTE (APENAS TEMA): aplica tema ANTES de renderizar (evita “piscar” e garante Tailwind dark:) -->
+    <script>
+      (function () {
+        try {
+          const KEY = "nfseTheme";
+          const saved = localStorage.getItem(KEY) || "light";
+          const isDark = saved === "dark";
+
+          // Tailwind (dark:...) usa a classe "dark" no <html>
+          document.documentElement.classList.toggle("dark", isDark);
+
+          // Seu CSS custom usa "dark-mode" no <body>
+          // (body pode ainda não existir aqui; reforçamos no script do final também)
+          if (document.body) document.body.classList.toggle("dark-mode", isDark);
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- Tailwind via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -120,6 +138,79 @@
 
       body.dark-mode .tab-btn.bg-slate-100 {
         background-color: #111827 !important;
+      }
+
+      /* =========================================================
+         ✅ AJUSTE: Modal (Configurações/Usuários) maior + respeita tema
+         - Funciona para modais criados via JS usando role="dialog"
+         - Também cobre algumas classes genéricas comuns
+      ========================================================== */
+
+      /* tamanho do modal */
+      [role="dialog"] {
+        width: min(1000px, 92vw) !important;
+        max-height: 85vh !important;
+      }
+
+      /* força scroll interno quando o modal tem muito conteúdo */
+      [role="dialog"] .modal-body,
+      [role="dialog"] .dialog-body,
+      [role="dialog"] .content,
+      [role="dialog"] .body {
+        max-height: calc(85vh - 120px) !important;
+        overflow: auto !important;
+      }
+
+      /* fundo/cores no tema CLARO */
+      body:not(.dark-mode) [role="dialog"] {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #e5e7eb !important;
+      }
+
+      body:not(.dark-mode) [role="dialog"] input,
+      body:not(.dark-mode) [role="dialog"] select,
+      body:not(.dark-mode) [role="dialog"] textarea {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #e5e7eb !important;
+      }
+
+      /* fundo/cores no tema ESCURO */
+      body.dark-mode [role="dialog"] {
+        background: rgba(2, 6, 23, 0.98) !important;
+        color: #e5e7eb !important;
+        border-color: #1f2937 !important;
+      }
+
+      /* fallback: se seu modal não usa role="dialog" e usa classes comuns */
+      .modal,
+      .modal-content,
+      .modal-container,
+      .dialog,
+      .dialog-content {
+        width: min(1000px, 92vw);
+        max-height: 85vh;
+      }
+
+      body:not(.dark-mode) .modal,
+      body:not(.dark-mode) .modal-content,
+      body:not(.dark-mode) .modal-container,
+      body:not(.dark-mode) .dialog,
+      body:not(.dark-mode) .dialog-content {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #e5e7eb !important;
+      }
+
+      body.dark-mode .modal,
+      body.dark-mode .modal-content,
+      body.dark-mode .modal-container,
+      body.dark-mode .dialog,
+      body.dark-mode .dialog-content {
+        background: rgba(2, 6, 23, 0.98) !important;
+        color: #e5e7eb !important;
+        border-color: #1f2937 !important;
       }
     </style>
   </head>
@@ -909,7 +1000,6 @@
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-
                   <button
                     id="emitirNfseBtn"
                     class="bg-primary-btn inline-flex items-center justify-center px-6 py-2.5 text-xs md:text-sm font-medium rounded-lg bg-slate-900 text-white hover:bg-black transition-colors"
@@ -940,16 +1030,104 @@
     </div>
 
     <script>
-      // Aplicar tema salvo ao carregar (classe no body)
-      (function () {
-        const savedTheme = localStorage.getItem("nfseTheme") || "light";
-        if (savedTheme === "dark") {
-          document.body.classList.add("dark-mode");
-        }
-      })();
-    </script>
+  (function () {
+    const KEY = "nfseTheme";
 
-    <script src="/js/dashboard.js"></script>
+    function getEls() {
+      return {
+        btn: document.getElementById("themeToggleBtn"),
+        knob: document.getElementById("themeToggleKnob"),
+        sun: document.getElementById("themeSunIcon"),
+        moon: document.getElementById("themeMoonIcon"),
+      };
+    }
+
+    function apply(theme) {
+      const isDark = theme === "dark";
+
+      // Tailwind dark: usa html.dark
+      document.documentElement.classList.toggle("dark", isDark);
+
+      // Seu CSS custom usa body.dark-mode
+      if (document.body) document.body.classList.toggle("dark-mode", isDark);
+
+      try {
+        localStorage.setItem(KEY, isDark ? "dark" : "light");
+      } catch (e) {}
+
+      const { btn, knob, sun, moon } = getEls();
+
+      if (btn) btn.setAttribute("aria-checked", String(isDark));
+      if (knob) knob.style.transform = isDark ? "translateX(40px)" : "translateX(0px)";
+
+      if (sun) sun.className = isDark ? "text-slate-400" : "text-slate-700";
+      if (moon) moon.className = isDark ? "text-slate-200" : "text-slate-400";
+    }
+
+    function toggle() {
+      const nowDark =
+        document.documentElement.classList.contains("dark") ||
+        (document.body && document.body.classList.contains("dark-mode"));
+
+      apply(nowDark ? "light" : "dark");
+    }
+
+    function init() {
+      let saved = "light";
+      try {
+        saved = localStorage.getItem(KEY) || "light";
+      } catch (e) {}
+
+      apply(saved);
+
+      // ✅ click por CAPTURA: impede outros scripts de “anular” seu toggle
+      document.addEventListener(
+        "click",
+        function (e) {
+          const hit = e.target && e.target.closest && e.target.closest("#themeToggleBtn");
+          if (!hit) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+
+          toggle();
+        },
+        true // capture = true
+      );
+    }
+
+    // ✅ Se o dashboard.js recriar o header e trocar o botão, re-garante
+    const mo = new MutationObserver(() => {
+      const { btn } = getEls();
+      if (btn && !btn.dataset.themeBound) {
+        btn.dataset.themeBound = "1";
+        // nada aqui: o click está no document (captura), mas marcamos p/ evitar loops
+      }
+    });
+
+    // inicia quando der (sem depender do defer)
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+
+    // ✅ Reaplica ao voltar do cache do navegador
+    window.addEventListener("pageshow", () => {
+      let saved = "light";
+      try {
+        saved = localStorage.getItem(KEY) || "light";
+      } catch (e) {}
+      apply(saved);
+    });
+  })();
+</script>
+
+
+    <script src="/js/dashboard.js" defer></script>
     <script src="/js/historico.js"></script>
 
     <!-- ✅ novo -->
